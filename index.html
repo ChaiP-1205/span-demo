@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Span &bull; signal-to-sales routing for SigNoz</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --bg: #0b0d16; --panel: #151824; --panel-2: #1b1f2e; --panel-border: #2a2f42;
+    --text: #eef0f6; --muted: #949ab5;
+    --hot: #ff6b4a; --nurture: #ffb020; --self: #6366f1; --self-bright: #818cff; --success: #2dd4a7; --cyan: #22b8cf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(1200px 600px at 15% -5%, rgba(99,102,241,0.10), transparent 60%), var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 32px 48px 64px; }
+  .topbar { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+  .brand { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; background: linear-gradient(92deg, #fff 20%, var(--self-bright)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .brand-sub { font-size: 13.5px; color: var(--muted); }
+  .subtitle { color: var(--muted); font-size: 13.5px; max-width: 660px; line-height: 1.5; margin: 8px 0 22px; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--panel-border); margin-bottom: 26px; }
+  .tab-btn { background: none; border: none; color: var(--muted); font-family: 'Inter', sans-serif; font-size: 14px; padding: 10px 18px; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--self-bright); font-weight: 600; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; margin-bottom: 18px; }
+  .panel-header { padding: 13px 20px; border-bottom: 1px solid var(--panel-border); font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .panel-header .accent { width: 3px; height: 15px; border-radius: 2px; display: inline-block; margin-right: 9px; vertical-align: -2px; }
+  .tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; padding: 3px 9px; border-radius: 4px; white-space: nowrap; font-weight: 500; }
+  .tag.live { background: rgba(45,212,167,0.14); color: var(--success); }
+  .tag.sim { background: rgba(148,154,181,0.12); color: var(--muted); }
+  .tag.formula { background: rgba(99,102,241,0.16); color: var(--self-bright); }
+  .side-panel { padding: 20px; }
+
+  /* Signup */
+  .signup-hero { display: grid; grid-template-columns: 1fr 400px; gap: 48px; align-items: stretch; }
+  .hero-left { border-radius: 8px; padding: 40px; background: linear-gradient(155deg, rgba(99,102,241,0.14), rgba(34,184,207,0.05) 55%, transparent); border: 1px solid var(--panel-border); display: flex; flex-direction: column; justify-content: center; }
+  .hero-left h1 { font-size: 33px; font-weight: 800; line-height: 1.14; margin: 0 0 26px; letter-spacing: -0.015em; }
+  .hero-left h1 .hl { color: var(--self-bright); }
+  .value-list { list-style: none; padding: 0; margin: 0; }
+  .value-list li { display: flex; gap: 12px; margin-bottom: 18px; font-size: 14px; }
+  .value-list .vcheck { color: var(--success); flex-shrink: 0; font-weight: 700; }
+  .value-list .vtitle { font-weight: 600; }
+  .value-list .vdesc { color: var(--muted); font-size: 13px; }
+  .trusted { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--panel-border); }
+  .trusted .tlabel { font-size: 10.5px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+  .trusted .tnames { display: flex; gap: 22px; color: #c3c8dd; font-weight: 600; font-size: 13.5px; opacity: 0.75; flex-wrap: wrap; }
+  .signup-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; padding: 26px; }
+  .signup-card h2 { font-size: 18px; margin: 0 0 6px; }
+  .signup-card .lede { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .oauth-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: var(--panel-2); border: 1px solid var(--panel-border); color: var(--text); padding: 10px; border-radius: 6px; font-size: 13.5px; font-weight: 500; cursor: pointer; margin-bottom: 10px; transition: border-color 0.15s; }
+  .oauth-btn:hover { border-color: var(--self); }
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin: 18px 0; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--panel-border); }
+  input, select { background: #0d0f1a; border: 1px solid var(--panel-border); color: var(--text); padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13.5px; width: 100%; }
+  input:focus, select:focus { outline: none; border-color: var(--self); }
+  input.mono { font-family: 'IBM Plex Mono', monospace; }
+  label { font-size: 12px; color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  button.primary { background: linear-gradient(92deg, var(--self), var(--self-bright)); color: #fff; border: none; padding: 12px 22px; border-radius: 6px; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; font-size: 14px; width: 100%; }
+  button.ghost { background: none; border: 1px solid var(--panel-border); color: var(--text); padding: 8px 16px; border-radius: 6px; font-family: 'Inter', sans-serif; cursor: pointer; font-size: 13px; }
+  button.ghost:hover { border-color: var(--self); }
+  .fine-print { font-size: 11px; color: var(--muted); text-align: center; margin-top: 14px; }
+  .demo-callout { background: rgba(99,102,241,0.09); border: 1px solid rgba(99,102,241,0.28); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+  .demo-callout .dc-title { font-size: 11.5px; font-weight: 600; color: var(--self-bright); margin-bottom: 3px; }
+  .demo-callout .dc-body { font-size: 11px; color: var(--muted); line-height: 1.45; }
+  .success-box { text-align: center; padding: 40px 20px; }
+  .success-box .check { font-size: 40px; margin-bottom: 12px; }
+  .success-box h2 { font-size: 21px; margin: 0 0 8px; }
+  .success-box p { color: var(--muted); font-size: 14px; line-height: 1.6; max-width: 400px; margin: 0 auto 22px; }
+
+  /* Stats & impact */
+  .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 18px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px 18px; position: relative; overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--panel-border); }
+  .stat-card.hot::before { background: var(--hot); } .stat-card.nurture::before { background: var(--nurture); } .stat-card.self::before { background: var(--self-bright); }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .stat-card .value { font-family: 'IBM Plex Mono', monospace; font-size: 25px; font-weight: 600; }
+  .stat-card.hot .value { color: var(--hot); } .stat-card.nurture .value { color: var(--nurture); } .stat-card.self .value { color: var(--self-bright); }
+  .impact-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .impact-card { background: linear-gradient(160deg, var(--panel-2), var(--panel)); border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px 18px; }
+  .impact-card .metric { font-family: 'IBM Plex Mono', monospace; font-size: 23px; font-weight: 600; color: var(--self-bright); margin-bottom: 6px; }
+  .impact-card .title { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+  .impact-card .caption { font-size: 11.5px; color: var(--muted); }
+
+  .table-scroll { overflow: auto; max-height: 460px; }
+  table { border-collapse: collapse; font-size: 13px; white-space: nowrap; width: 100%; }
+  thead th { position: sticky; top: 0; text-align: left; padding: 9px 16px; color: var(--muted); font-weight: 500; font-size: 11.5px; border-bottom: 1px solid var(--panel-border); background: var(--panel-2); z-index: 1; }
+  tbody td { padding: 9px 16px; border-bottom: 1px solid #1f2333; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; }
+  tbody tr:hover td { background: rgba(99,102,241,0.05); }
+  tbody td.company { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; }
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .badge.hot { background: rgba(255,107,74,0.16); color: var(--hot); }
+  .badge.nurture { background: rgba(255,176,32,0.16); color: var(--nurture); }
+  .badge.self { background: rgba(99,102,241,0.18); color: var(--self-bright); }
+  .badge.layer-basic { background: rgba(34,184,207,0.16); color: var(--cyan); }
+  .badge.layer-deep { background: rgba(99,102,241,0.18); color: var(--self-bright); }
+  .main-grid { display: grid; grid-template-columns: 1fr 300px; gap: 18px; }
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+
+  /* Behind the scenes */
+  .stage-title { font-size: 15px; font-weight: 600; }
+  .kv { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 2; }
+  .kv .k { color: var(--muted); font-family: 'Inter', sans-serif; }
+  .score-row { display: flex; justify-content: space-between; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 7px 0; border-bottom: 1px solid #1f2333; }
+  .score-row .bar-wrap { display: flex; align-items: center; gap: 10px; }
+  .score-track { width: 90px; height: 6px; background: #262a3d; border-radius: 3px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 3px; background: var(--self-bright); }
+  .score-fill.pending { background: #3a3f55; }
+  .crm-card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; background: #0d0f1a; }
+  .action-list { list-style: none; padding: 0; margin: 0; }
+  .action-list li { display: flex; gap: 10px; padding: 7px 0; font-size: 13px; align-items: center; }
+  .action-list .a-yes { color: var(--success); font-weight: 700; } .action-list .a-no { color: #4a4f66; } .action-list .a-pending { color: var(--nurture); font-weight: 700; }
+  .slack-msg { border-left: 3px solid var(--hot); padding: 13px 16px; background: #0d0f1a; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.6; }
+  .slack-msg.nurture-msg { border-left-color: var(--nurture); }
+  .slack-msg .opener { font-style: italic; color: #d7dbe8; margin: 6px 0; padding: 8px 10px; background: rgba(255,255,255,0.03); border-radius: 4px; }
+  .enrichment-stage { border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+  .enrichment-stage.basic { border-left: 3px solid var(--cyan); }
+  .enrichment-stage.deep { border-left: 3px solid var(--self-bright); background: rgba(99,102,241,0.04); }
+  .enrichment-stage .es-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .enrichment-stage .es-title { font-size: 13.5px; font-weight: 700; }
+  .enrichment-stage .es-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .trigger-box { background: #0d0f1a; border: 1px dashed var(--panel-border); border-radius: 8px; padding: 14px 16px; text-align: center; }
+  .trigger-box .tb-copy { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .trigger-conditions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .trigger-chip { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; padding: 4px 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--panel-border); color: var(--muted); }
+  .pending-note { font-size: 11.5px; color: var(--nurture); font-style: italic; margin-top: 8px; }
+
+  /* How it decides */
+  .callout { background: linear-gradient(150deg, rgba(99,102,241,0.12), transparent 70%); border: 1px solid var(--panel-border); border-left: 3px solid var(--self-bright); padding: 18px 22px; border-radius: 8px; }
+  .callout .callout-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+  .callout ul { margin: 0; padding-left: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .callout li { font-size: 13px; color: #d7dbe8; display: flex; gap: 9px; }
+  .callout li .ci { color: var(--self-bright); font-weight: 700; }
+  .signals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .signal-card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; background: var(--panel-2); }
+  .signal-card .sc-signal { font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+  .signal-card .sc-maps { font-size: 11px; font-family: 'IBM Plex Mono', monospace; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; margin-right: 6px; }
+  .signal-card.fit .sc-maps { background: rgba(99,102,241,0.18); color: var(--self-bright); }
+  .signal-card.window .sc-maps { background: rgba(255,107,74,0.16); color: var(--hot); }
+  .signal-card.intent .sc-maps { background: rgba(45,212,167,0.14); color: var(--success); }
+  .signal-card .sc-layer { font-size: 10px; font-family: 'IBM Plex Mono', monospace; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
+  .signal-card .sc-layer.basic { background: rgba(34,184,207,0.16); color: var(--cyan); }
+  .signal-card .sc-layer.deep { background: rgba(148,154,181,0.14); color: var(--muted); }
+  .signal-card .sc-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .flow-box { background: var(--panel-2); border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px 16px; font-size: 13px; min-width: 132px; }
+  .flow-box .fb-title { font-weight: 600; margin-bottom: 4px; }
+  .flow-box .fb-sub { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+  .flow-arrow { color: var(--self-bright); font-size: 18px; }
+  .flow-arrow.down { transform: rotate(90deg); }
+  .branch-group { display: flex; flex-direction: column; gap: 8px; }
+  .flow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .flow-deep-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--panel-border); }
+  .weights-list { list-style: none; padding: 0; margin: 0; counter-reset: w; }
+  .weights-list li { counter-increment: w; display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid #1f2333; align-items: center; }
+  .weights-list li:last-child { border-bottom: none; }
+  .weights-list .wnum { font-family: 'IBM Plex Mono', monospace; color: var(--self-bright); font-weight: 600; font-size: 15px; }
+  .weights-list .wtitle { font-weight: 600; font-size: 13.5px; }
+  .weights-list .wpts { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+  .weights-list .wdesc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .weights-list .wbar-track { flex: 1; height: 6px; background: #262a3d; border-radius: 3px; overflow: hidden; max-width: 160px; }
+  .weights-list .wbar { height: 100%; background: linear-gradient(90deg, var(--self), var(--self-bright)); border-radius: 3px; }
+  .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .rule-card { border: 1px solid var(--panel-border); border-radius: 8px; padding: 14px 16px; background: var(--panel-2); }
+  .rule-card .rc-title { font-size: 13px; font-weight: 600; color: var(--self-bright); margin-bottom: 5px; }
+  .rule-card .rc-body { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .rule-card .rc-num { font-family: 'IBM Plex Mono', monospace; color: var(--success); }
+</style>
+</head>
+<body>
+
+<div class="topbar"><span class="brand">Span</span><span class="brand-sub">tracing every signup from click to qualified lead</span></div>
+<div class="subtitle">Scores self-hosted and Cloud-trial signups on usage and firmographic signals to decide which accounts get a sales-assisted touch today, which go to nurture, and which stay self-serve.</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="signup">Sign up</button>
+  <button class="tab-btn" data-tab="engine">Behind the scenes</button>
+  <button class="tab-btn" data-tab="reports">Reports</button>
+  <button class="tab-btn" data-tab="logic">How it decides</button>
+</div>
+
+<!-- TAB 1: SIGN UP -->
+<div class="tab-panel active" id="tab-signup">
+  <div id="signup-form-wrap">
+    <div class="signup-hero">
+      <div class="hero-left">
+        <h1>One dashboard for <span class="hl">every signal</span> your team ships.</h1>
+        <ul class="value-list">
+          <li><span class="vcheck">&#10003;</span><div><div class="vtitle">Open-source, OTel-native</div><div class="vdesc">Your instrumentation stays yours, whatever you decide.</div></div></li>
+          <li><span class="vcheck">&#10003;</span><div><div class="vtitle">Usage-based pricing you can predict</div><div class="vdesc">No per-host fees, no surprises.</div></div></li>
+          <li><span class="vcheck">&#10003;</span><div><div class="vtitle">Logs, metrics, traces in one place</div><div class="vdesc">Fully correlated, not three separate tools.</div></div></li>
+          <li><span class="vcheck">&#10003;</span><div><div class="vtitle">Live in under an hour</div><div class="vdesc">Pre-built dashboards for 100+ integrations.</div></div></li>
+        </ul>
+        <div class="trusted">
+          <div class="tlabel">Trusted by teams at</div>
+          <div class="tnames"><span>NetApp</span><span>Samsung</span><span>Comcast</span><span>Sarvam</span></div>
+        </div>
+      </div>
+      <div class="signup-card">
+        <h2>Get started with SigNoz Cloud</h2>
+        <div class="lede">Create a workspace with a 30-day free trial. No credit card required.</div>
+        <button class="oauth-btn" id="oauth-google" type="button">Continue with Google</button>
+        <button class="oauth-btn" id="oauth-github" type="button">Continue with GitHub</button>
+        <div class="divider">or use your work email</div>
+        <form id="live-form">
+          <div class="field"><label>Company name</label><input id="f-company" type="text" placeholder="e.g. Acme Inc" required></div>
+          <div class="field"><label>Work email</label><input id="f-email" type="email" placeholder="e.g. jane@acme.com"></div>
+          <div class="field"><label>Plan</label><select id="f-plan"><option>Cloud trial</option><option>Self-hosted</option></select></div>
+          <details id="demo-details">
+            <summary style="cursor:pointer;color:var(--self-bright);font-size:12.5px;font-weight:600;">&#9881; Demo controls (open before submitting)</summary>
+            <div style="margin-top:12px;">
+              <div class="demo-callout">
+                <div class="dc-title">For the live demo, fill the GitHub field</div>
+                <div class="dc-body">A real form never asks this. It stands in for what a "Continue with GitHub" OAuth handshake would supply automatically &mdash; the one signal that's genuinely available the instant someone signs up. Try posthog, vercel, or grafana to see the live API fetch. Everything else Span uses (usage volume, hiring signals) isn't known yet at signup &mdash; you'll see it arrive later, on the Behind the scenes tab, the way it would in production.</div>
+              </div>
+              <div class="field"><label>GitHub org/username (simulated OAuth)</label><input id="f-github" class="mono" type="text" placeholder="e.g. posthog"></div>
+              <input id="f-ingestion" type="hidden">
+              <input id="f-sre" type="hidden">
+              <input id="f-days" type="hidden">
+            </div>
+          </details>
+          <button type="submit" class="primary" style="margin-top:6px;">Start Your Free Trial &rarr;</button>
+          <div class="fine-print">By signing up, you agree to our Terms and Privacy Policy.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div id="signup-success-wrap" style="display:none;">
+    <div class="panel"><div class="success-box">
+      <div class="check">&#9989;</div>
+      <h2>You're all set</h2>
+      <p id="success-msg"></p>
+      <button class="ghost" id="continue-btn">See how Span processed it &rarr;</button>
+      &nbsp;
+      <button class="ghost" id="another-btn">Submit another</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- TAB 2: BEHIND THE SCENES -->
+<div class="tab-panel" id="tab-engine">
+  <div id="engine-empty" class="panel"><div class="side-panel" style="text-align:center;color:var(--muted);padding:40px 20px;">Submit a signup on the <b>Sign up</b> tab to see it processed here.</div></div>
+  <div id="engine-content" style="display:none;">
+    <div class="panel">
+      <div class="panel-header"><span><span class="accent" style="background:var(--cyan);"></span>Step 1 &bull; Basic enrichment</span><span class="tag live" id="enrich-tag">LIVE &bull; real-time</span></div>
+      <div class="side-panel kv" id="enrich-body"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span><span class="accent" style="background:var(--self-bright);"></span>Step 2 &bull; Deep enrichment</span><span class="tag sim" id="deep-tag">simulated &bull; triggered later</span></div>
+      <div class="side-panel" id="deep-body"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span><span class="accent" style="background:var(--nurture);"></span>Step 3 &bull; Scoring &amp; tiering</span><span class="tag formula">weighted formula</span></div>
+      <div class="side-panel" id="score-body"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span><span class="accent" style="background:var(--hot);"></span>Step 4 &bull; Actions taken</span><span class="tag sim">CRM + Slack</span></div>
+      <div class="side-panel" id="route-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: REPORTS -->
+<div class="tab-panel" id="tab-reports">
+  <div class="stats-row" id="stats-row"></div>
+  <div class="impact-row" id="impact-row"></div>
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-header">Signups <span class="tag sim">sample data</span></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>Company</th><th>Signup type</th><th>GitHub &#9733;</th><th>Ingestion %</th><th>Employees</th>
+            <th>Funding</th><th>SRE posts (90d)</th><th>Days since</th><th>Score</th><th>Tier</th><th>Top signal</th>
+          </tr></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">Tier distribution</div>
+      <div class="side-panel"><canvas id="tierChart" width="260" height="220"></canvas></div>
+    </div>
+  </div>
+  <div class="charts-row" style="margin-top:18px;">
+    <div class="panel">
+      <div class="panel-header">Signup type mix</div>
+      <div class="side-panel"><canvas id="planChart" width="260" height="220"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">Average score by funding stage</div>
+      <div class="side-panel"><canvas id="fundingChart" width="380" height="220"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 4: HOW IT DECIDES -->
+<div class="tab-panel" id="tab-logic">
+  <div class="callout" style="margin-bottom:18px;">
+    <div class="callout-title">What this demonstrates</div>
+    <ul>
+      <li><span class="ci">&rarr;</span><span>Live external enrichment via the real GitHub API, not just static placeholder fields.</span></li>
+      <li><span class="ci">&rarr;</span><span>Transparent, tunable scoring: every weight and threshold is visible, not a black box.</span></li>
+      <li><span class="ci">&rarr;</span><span>Named business rules for dedup, idempotency, and cost control, considered up front.</span></li>
+      <li><span class="ci">&rarr;</span><span>Built around SigNoz's real PLG motion: triaging inbound signups the way pipeline needs.</span></li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Decision flow</div>
+    <div class="side-panel">
+      <div class="flow-row">
+        <div class="flow-box"><div class="fb-title">Signup</div><div class="fb-sub">Company + plan submitted &mdash; the intent signal</div></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box" style="border-color:var(--cyan);"><div class="fb-title" style="color:var(--cyan);">Basic enrichment</div><div class="fb-sub">GitHub cluster, live, real-time &mdash; the only fit signal available at signup</div></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-box"><div class="fb-title">Weighted score (partial)</div><div class="fb-sub">GitHub + plan only</div></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="branch-group">
+          <div class="flow-box" style="border-color:var(--hot);"><div class="fb-title" style="color:var(--hot);">&ge;70 Sales-assist now</div><div class="fb-sub">Slack alert + CRM tier set</div></div>
+          <div class="flow-box" style="border-color:var(--nurture);"><div class="fb-title" style="color:var(--nurture);">40 to 69 Nurture</div><div class="fb-sub">Added to lifecycle email track</div></div>
+          <div class="flow-box" style="border-color:var(--self-bright);"><div class="fb-title" style="color:var(--self-bright);">&lt;40 Self-serve</div><div class="fb-sub">No action, revisit on next signal</div></div>
+        </div>
+      </div>
+      <div class="flow-deep-wrap">
+        <div class="flow-arrow down">&rarr;</div>
+        <div class="flow-row" style="justify-content:center;">
+          <div class="flow-box" style="border-color:var(--self-bright);min-width:180px;"><div class="fb-title" style="color:var(--self-bright);">Deep enrichment, gated</div><div class="fb-sub">SRE/hiring lookup runs only if basic score clears a floor</div></div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-box" style="border-color:var(--self-bright);min-width:180px;"><div class="fb-title" style="color:var(--self-bright);">Deep enrichment, streaming</div><div class="fb-sub">Ingestion % and trial-day usage arrive as the trial progresses</div></div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-box" style="border-color:var(--success);"><div class="fb-title" style="color:var(--success);">Re-score, on trigger</div><div class="fb-sub">80% of ingestion cap, or day 20 of 30 &mdash; can promote nurture &rarr; sales-assist</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Why these signals</div>
+    <div class="side-panel">
+      <div class="signals-grid">
+        <div class="signal-card fit"><div class="sc-signal">GitHub activity</div><div><span class="sc-maps">maps to FIT</span><span class="sc-layer basic">basic &middot; at signup</span></div><div class="sc-desc">Is this the kind of engineering org the product is built for? Public and free, so it's available the instant someone signs up.</div></div>
+        <div class="signal-card window"><div class="sc-signal">Ingestion volume</div><div><span class="sc-maps">maps to BUYING WINDOW</span><span class="sc-layer deep">deep &middot; streams in over trial</span></div><div class="sc-desc">How close are they to a forced decision point on their limits? Doesn't exist until they've actually started sending data.</div></div>
+        <div class="signal-card intent"><div class="sc-signal">SRE / DevOps hiring</div><div><span class="sc-maps">maps to INTENT</span><span class="sc-layer deep">deep &middot; gated lookup</span></div><div class="sc-desc">Are they actively investing in the function that owns this call? An external lookup, only worth paying for once basic fit clears a floor.</div></div>
+      </div>
+      <div style="margin-top:14px;font-size:12.5px;color:var(--muted);">Together these cover the three questions that qualify an account: fit, buying window, and intent &mdash; but only fit is knowable at the moment of signup. The other two are why Span re-scores instead of deciding once and stopping.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Why these weights</div>
+    <div class="side-panel">
+      <ol class="weights-list">
+        <li><span class="wnum">01</span><div style="flex:1;"><div class="wtitle">GitHub activity <span class="wpts">0 to 30 pts</span></div><div class="wdesc">Strongest available proxy for real technical scale. Basic enrichment &mdash; known at signup.</div></div><div class="wbar-track"><div class="wbar" style="width:100%;"></div></div></li>
+        <li><span class="wnum">02</span><div style="flex:1;"><div class="wtitle">Ingestion volume <span class="wpts">0 to 30 pts</span></div><div class="wdesc">Strongest proxy for near-term infrastructure pain. Deep enrichment &mdash; arrives once the trial is underway.</div></div><div class="wbar-track"><div class="wbar" style="width:100%;"></div></div></li>
+        <li><span class="wnum">03</span><div style="flex:1;"><div class="wtitle">SRE / DevOps hiring <span class="wpts">0 to 20 pts</span></div><div class="wdesc">Slower-moving, but still a meaningful intent signal. Deep enrichment &mdash; gated external lookup.</div></div><div class="wbar-track"><div class="wbar" style="width:66%;"></div></div></li>
+        <li><span class="wnum">04</span><div style="flex:1;"><div class="wtitle">Plan type <span class="wpts">0 to 10 pts</span></div><div class="wdesc">Weak signal alone, a light tiebreaker not a driver. Basic enrichment &mdash; known at signup.</div></div><div class="wbar-track"><div class="wbar" style="width:33%;"></div></div></li>
+      </ol>
+      <div style="margin-top:12px;font-size:12.5px;color:var(--muted);">Thresholds are configuration, not hardcoded logic, so they can be retuned as real conversion data comes in.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Business rules</div>
+    <div class="side-panel">
+      <div class="rules-grid">
+        <div class="rule-card"><div class="rc-title">One account per company</div><div class="rc-body">A repeat signup, matched by domain, updates the existing account instead of creating a duplicate lead. Keyed by workspace, not per person.</div></div>
+        <div class="rule-card"><div class="rc-title">Idempotent scoring</div><div class="rc-body">Re-scoring the same signup does not re-fire a Slack alert or CRM write. Same input in, same result out, no duplicates.</div></div>
+        <div class="rule-card"><div class="rc-title">Cost-gated enrichment</div><div class="rc-body">Live GitHub lookups run <span class="rc-num">once per new signal</span>. The SRE/hiring lookup only fires for leads that clear a basic-fit floor, not every signup.</div></div>
+        <div class="rule-card"><div class="rc-title">Partial-data fit check</div><div class="rc-body">A missing signal still yields a score from the other <span class="rc-num">3 of 4</span> inputs. Enrichment gaps never block the pipeline.</div></div>
+        <div class="rule-card"><div class="rc-title">Adjustable thresholds</div><div class="rc-body">Score cutoffs (<span class="rc-num">70</span> / <span class="rc-num">40</span>) are settings, so sales and marketing move the line as they learn what converts.</div></div>
+        <div class="rule-card"><div class="rc-title">Event-driven re-scoring</div><div class="rc-body">Ingestion and usage data trigger a re-score on threshold, not on a fixed schedule &mdash; <span class="rc-num">80%</span> of trial cap or day <span class="rc-num">20/30</span>, whichever comes first.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  "generated_note": "Synthetic sample data for demo purposes only — fictional company names, not real prospects.",
+  "signups": [
+    {"company": "Kestrel Labs", "signup_type": "Cloud trial", "github_stars": 340, "ingestion_pct_of_limit": 92, "employees": 38, "funding_stage": "Series A", "sre_postings_90d": 3, "days_since_signup": 11, "score": 88, "tier": "sales-assist-now"},
+    {"company": "Northwind Analytics", "signup_type": "Self-hosted", "github_stars": 1200, "ingestion_pct_of_limit": 78, "employees": 65, "funding_stage": "Series B", "sre_postings_90d": 5, "days_since_signup": 24, "score": 91, "tier": "sales-assist-now"},
+    {"company": "Vaultline", "signup_type": "Cloud trial", "github_stars": 12, "ingestion_pct_of_limit": 15, "employees": 6, "funding_stage": "Seed", "sre_postings_90d": 0, "days_since_signup": 3, "score": 22, "tier": "self-serve"},
+    {"company": "Driftwood AI", "signup_type": "Cloud trial", "github_stars": 890, "ingestion_pct_of_limit": 65, "employees": 22, "funding_stage": "Seed", "sre_postings_90d": 2, "days_since_signup": 18, "score": 71, "tier": "nurture"},
+    {"company": "Parallax Systems", "signup_type": "Self-hosted", "github_stars": 45, "ingestion_pct_of_limit": 30, "employees": 14, "funding_stage": "Series A", "sre_postings_90d": 1, "days_since_signup": 40, "score": 48, "tier": "nurture"},
+    {"company": "Cinderfield", "signup_type": "Cloud trial", "github_stars": 5, "ingestion_pct_of_limit": 8, "employees": 4, "funding_stage": "Pre-seed", "sre_postings_90d": 0, "days_since_signup": 2, "score": 14, "tier": "self-serve"},
+    {"company": "Ashgrove Robotics", "signup_type": "Self-hosted", "github_stars": 2100, "ingestion_pct_of_limit": 84, "employees": 90, "funding_stage": "Series B", "sre_postings_90d": 6, "days_since_signup": 33, "score": 94, "tier": "sales-assist-now"},
+    {"company": "Loomwork", "signup_type": "Cloud trial", "github_stars": 60, "ingestion_pct_of_limit": 42, "employees": 18, "funding_stage": "Seed", "sre_postings_90d": 1, "days_since_signup": 9, "score": 52, "tier": "nurture"},
+    {"company": "Halcyon Data", "signup_type": "Cloud trial", "github_stars": 3, "ingestion_pct_of_limit": 5, "employees": 3, "funding_stage": "Pre-seed", "sre_postings_90d": 0, "days_since_signup": 1, "score": 9, "tier": "self-serve"},
+    {"company": "Foundry Agents", "signup_type": "Self-hosted", "github_stars": 1780, "ingestion_pct_of_limit": 71, "employees": 44, "funding_stage": "Series A", "sre_postings_90d": 4, "days_since_signup": 15, "score": 83, "tier": "sales-assist-now"},
+    {"company": "Millrace", "signup_type": "Cloud trial", "github_stars": 25, "ingestion_pct_of_limit": 20, "employees": 9, "funding_stage": "Seed", "sre_postings_90d": 0, "days_since_signup": 6, "score": 27, "tier": "self-serve"},
+    {"company": "Quietbrook AI", "signup_type": "Cloud trial", "github_stars": 410, "ingestion_pct_of_limit": 55, "employees": 27, "funding_stage": "Series A", "sre_postings_90d": 2, "days_since_signup": 21, "score": 64, "tier": "nurture"},
+    {"company": "Barrowfield", "signup_type": "Self-hosted", "github_stars": 8, "ingestion_pct_of_limit": 11, "employees": 5, "funding_stage": "Bootstrapped", "sre_postings_90d": 0, "days_since_signup": 4, "score": 12, "tier": "self-serve"},
+    {"company": "Cobalt Sequence", "signup_type": "Cloud trial", "github_stars": 950, "ingestion_pct_of_limit": 88, "employees": 52, "funding_stage": "Series B", "sre_postings_90d": 5, "days_since_signup": 29, "score": 90, "tier": "sales-assist-now"},
+    {"company": "Emberline", "signup_type": "Cloud trial", "github_stars": 35, "ingestion_pct_of_limit": 33, "employees": 11, "funding_stage": "Seed", "sre_postings_90d": 1, "days_since_signup": 12, "score": 45, "tier": "nurture"},
+    {"company": "Wraithcastle", "signup_type": "Self-hosted", "github_stars": 2, "ingestion_pct_of_limit": 4, "employees": 2, "funding_stage": "Pre-seed", "sre_postings_90d": 0, "days_since_signup": 1, "score": 7, "tier": "self-serve"},
+    {"company": "Tallow & Wick Systems", "signup_type": "Cloud trial", "github_stars": 610, "ingestion_pct_of_limit": 69, "employees": 31, "funding_stage": "Series A", "sre_postings_90d": 3, "days_since_signup": 17, "score": 74, "tier": "nurture"},
+    {"company": "Redshale", "signup_type": "Self-hosted", "github_stars": 1450, "ingestion_pct_of_limit": 81, "employees": 58, "funding_stage": "Series B", "sre_postings_90d": 4, "days_since_signup": 26, "score": 86, "tier": "sales-assist-now"},
+    {"company": "Pinegrove Labs", "signup_type": "Cloud trial", "github_stars": 18, "ingestion_pct_of_limit": 18, "employees": 7, "funding_stage": "Seed", "sre_postings_90d": 0, "days_since_signup": 8, "score": 24, "tier": "self-serve"},
+    {"company": "Ironthread AI", "signup_type": "Cloud trial", "github_stars": 730, "ingestion_pct_of_limit": 76, "employees": 40, "funding_stage": "Series A", "sre_postings_90d": 3, "days_since_signup": 20, "score": 79, "tier": "sales-assist-now"}
+  ]
+}
+;
+
+const tierMeta = {
+  "sales-assist-now": { label: "Sales-assist now", cls: "hot", color: "#ff6b4a" },
+  "nurture": { label: "Nurture", cls: "nurture", color: "#ffb020" },
+  "self-serve": { label: "Self-serve", cls: "self", color: "#818cff" }
+};
+const signalLabels = { github: 'GitHub activity', ingestion: 'Ingestion %', sre: 'SRE hiring', plan: 'Plan type' };
+const signalLayer = { github: 'basic', plan: 'basic', ingestion: 'deep', sre: 'deep' };
+
+let signups = DATA.signups.slice().sort((a, b) => b.score - a.score);
+let charts = {};
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+function scoreComponents(row) {
+  return {
+    github: Math.min(row.github_stars, 2000) / 2000 * 30,
+    ingestion: (row.ingestion_pct_of_limit / 100) * 30,
+    sre: Math.min(row.sre_postings_90d, 10) / 10 * 20,
+    plan: row.signup_type === 'Cloud trial' ? 10 : 6
+  };
+}
+function dominantKey(components) {
+  return Object.entries(components).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+// Deterministic per-company defaults so the same org demos the same way every time,
+// while different orgs still look varied. Only used when the field is left blank.
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) { h = ((h << 5) - h + str.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+}
+function deriveDefaults(seedStr) {
+  const h = hashString(seedStr || 'default');
+  return {
+    ingestion: 20 + (h % 75),        // 20 to 94
+    sre: h % 8,                       // 0 to 7
+    days: 1 + (Math.floor(h / 7) % 40) // 1 to 40
+  };
+}
+function applyDefaults(seedStr) {
+  const d = deriveDefaults(seedStr);
+  document.getElementById('f-ingestion').value = d.ingestion;
+  document.getElementById('f-sre').value = d.sre;
+  document.getElementById('f-days').value = d.days;
+}
+
+function renderStats() {
+  const counts = { "sales-assist-now": 0, "nurture": 0, "self-serve": 0 };
+  let scoreSum = 0;
+  signups.forEach(s => { counts[s.tier]++; scoreSum += s.score; });
+  const avgScore = (scoreSum / signups.length).toFixed(1);
+  const stats = [
+    { label: "Total scored", value: signups.length, cls: "" },
+    { label: "Sales-assist now", value: counts["sales-assist-now"], cls: "hot" },
+    { label: "Nurture", value: counts["nurture"], cls: "nurture" },
+    { label: "Self-serve", value: counts["self-serve"], cls: "self" },
+    { label: "Average score", value: avgScore, cls: "" }
+  ];
+  document.getElementById('stats-row').innerHTML = stats.map(s => `
+    <div class="stat-card ${s.cls}"><div class="label">${s.label}</div><div class="value">${s.value}</div></div>
+  `).join('');
+  return counts;
+}
+
+function renderImpactCards(counts) {
+  const total = signups.length;
+  const pctHot = ((counts["sales-assist-now"] / total) * 100).toFixed(0);
+  const hotSignups = signups.filter(s => s.tier === 'sales-assist-now');
+  const avgDaysHot = hotSignups.length ? (hotSignups.reduce((sum, s) => sum + s.days_since_signup, 0) / hotSignups.length).toFixed(1) : '&mdash;';
+  const cards = [
+    { metric: pctHot + '%', title: 'Pipeline focus', caption: 'of signups, sales-ready' },
+    { metric: avgDaysHot + 'd', title: 'Time-to-signal', caption: 'to flag a hot lead' },
+    { metric: '3 tracks', title: 'Lifecycle segmentation', caption: 'distinct email journeys' },
+    { metric: 'Live', title: 'Continuously trackable', caption: 'tunable, not fixed' }
+  ];
+  document.getElementById('impact-row').innerHTML = cards.map(c => `
+    <div class="impact-card"><div class="metric">${c.metric}</div><div class="title">${c.title}</div><div class="caption">${c.caption}</div></div>
+  `).join('');
+}
+
+function renderTable() {
+  document.getElementById('table-body').innerHTML = signups.map(s => {
+    const meta = tierMeta[s.tier];
+    const domKey = dominantKey(scoreComponents(s));
+    const top = signalLabels[domKey];
+    const layer = signalLayer[domKey];
+    return `<tr${s.live ? ' style="background:rgba(99,102,241,0.09);"' : ''}>
+      <td class="company">${s.company}${s.live ? ' <span style="color:var(--self-bright);font-size:10px;">LIVE</span>' : ''}</td>
+      <td>${s.signup_type}</td><td>${s.github_stars}</td><td>${s.ingestion_pct_of_limit}%</td>
+      <td>${s.employees}</td><td>${s.funding_stage}</td><td>${s.sre_postings_90d}</td><td>${s.days_since_signup}d</td>
+      <td>${s.score}</td><td><span class="badge ${meta.cls}">${meta.label}</span></td>
+      <td>${top} <span class="badge layer-${layer}">${layer}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function safeChart(id, config, fallbackText) {
+  const canvas = document.getElementById(id);
+  if (typeof Chart === 'undefined') {
+    let fb = document.getElementById(id + '-fallback');
+    if (!fb) {
+      fb = document.createElement('div');
+      fb.id = id + '-fallback';
+      fb.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);line-height:1.8;";
+      if (canvas) canvas.replaceWith(fb);
+    }
+    fb.innerHTML = fallbackText;
+    return null;
+  }
+  const el = document.getElementById(id);
+  if (!el) return null;
+  try {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(el, config);
+    return charts[id];
+  } catch (err) { console.error('Chart failed for ' + id, err); return null; }
+}
+
+function renderCharts(counts) {
+  safeChart('tierChart', {
+    type: 'bar',
+    data: { labels: ['Sales-assist', 'Nurture', 'Self-serve'], datasets: [{
+      data: [counts["sales-assist-now"], counts["nurture"], counts["self-serve"]],
+      backgroundColor: ['#ff6b4a', '#ffb020', '#818cff'], borderRadius: 5, barThickness: 40
+    }] },
+    options: { responsive: false, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#949ab5', font: { family: 'Inter', size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: '#949ab5', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#2a2f42' }, beginAtZero: true }
+      } }
+  }, 'Sales-assist: ' + counts["sales-assist-now"] + ' &middot; Nurture: ' + counts["nurture"] + ' &middot; Self-serve: ' + counts["self-serve"]);
+
+  const planCounts = {};
+  signups.forEach(s => { planCounts[s.signup_type] = (planCounts[s.signup_type] || 0) + 1; });
+  const planLabels = Object.keys(planCounts);
+  safeChart('planChart', {
+    type: 'doughnut',
+    data: { labels: planLabels, datasets: [{ data: planLabels.map(l => planCounts[l]), backgroundColor: ['#6366f1', '#22b8cf'], borderColor: '#151824', borderWidth: 2 }] },
+    options: { responsive: false, plugins: { legend: { position: 'bottom', labels: { color: '#949ab5', font: { family: 'Inter', size: 11 } } } } }
+  }, planLabels.map(l => l + ': ' + planCounts[l]).join(' &middot; '));
+
+  const fundingGroups = {};
+  signups.forEach(s => {
+    const key = (s.funding_stage === '&mdash;' || s.funding_stage === '\u2014') ? 'Unknown' : s.funding_stage;
+    if (!fundingGroups[key]) fundingGroups[key] = [];
+    fundingGroups[key].push(s.score);
+  });
+  const order = ['Pre-seed', 'Bootstrapped', 'Seed', 'Series A', 'Series B', 'Unknown'];
+  const fundingLabels = order.filter(k => fundingGroups[k]);
+  const fundingAverages = fundingLabels.map(k => (fundingGroups[k].reduce((a, b) => a + b, 0) / fundingGroups[k].length).toFixed(1));
+  safeChart('fundingChart', {
+    type: 'bar',
+    data: { labels: fundingLabels, datasets: [{ data: fundingAverages, backgroundColor: '#22b8cf', borderRadius: 5 }] },
+    options: { responsive: false, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#949ab5', font: { family: 'Inter', size: 10.5 } }, grid: { display: false } },
+        y: { ticks: { color: '#949ab5', font: { family: 'IBM Plex Mono', size: 11 } }, grid: { color: '#2a2f42' }, beginAtZero: true }
+      } }
+  }, fundingLabels.map((l, i) => l + ': ' + fundingAverages[i]).join(' &middot; '));
+}
+
+function renderAll() {
+  const counts = renderStats();
+  renderImpactCards(counts);
+  renderTable();
+  try { renderCharts(counts); } catch (err) { console.error('renderCharts threw:', err); }
+}
+try { renderAll(); } catch (err) { console.error('Initial render failed:', err); }
+applyDefaults('');
+
+function talkingPoint(dominant) {
+  const templates = {
+    ingestion: { why: "They are pushing right up against their current usage ceiling, which is a near-term decision point, not a hypothetical.",
+      opener: "Noticed you are running close to your current limits. Want to walk through what teams your size usually do before that becomes a fire drill?" },
+    github: { why: "This is a technically serious, community-scale engineering org, not a side project, so worth treating like one.",
+      opener: "Saw the scale of what you are building in the open. Curious how you are keeping visibility across all of it today." },
+    sre: { why: "They are actively growing their platform and SRE function, which is exactly when observability tooling decisions get made.",
+      opener: "Noticed you are hiring for SRE and platform roles, usually a sign the observability stack is getting a hard look. Good time to compare notes?" },
+    plan: { why: "Strong overall fit based on usage and team signals together.",
+      opener: "Wanted to reach out while you are early in your trial. Happy to walk through how teams like yours usually set things up." }
+  };
+  return templates[dominant] || templates.plan;
+}
+
+function actionList(tier, pending) {
+  const items = pending ? [
+    { label: 'CRM record created (provisional)', done: true },
+    { label: 'Slack alert to #sales-signals', pending: true },
+    { label: 'Nurture / self-serve enrollment', pending: true }
+  ] : [
+    { label: 'CRM record created', done: true },
+    { label: 'Slack alert to #sales-signals', done: tier === 'sales-assist-now' },
+    { label: 'Enrolled in nurture email sequence', done: tier === 'nurture' },
+    { label: 'Enrolled in self-serve onboarding emails', done: tier === 'self-serve' }
+  ];
+  return '<ul class="action-list">' + items.map(i =>
+    `<li><span class="${i.pending ? 'a-pending' : (i.done ? 'a-yes' : 'a-no')}">${i.pending ? '&#8230;' : (i.done ? '&#10003;' : '&#10005;')}</span>${i.label}${i.pending ? ' <span style="color:var(--muted);font-size:11px;">(awaiting deep enrichment)</span>' : ''}</li>`
+  ).join('') + '</ul>';
+}
+
+const bar = (v, max, pending) => `<div class="bar-wrap"><div class="score-track"><div class="score-fill${pending ? ' pending' : ''}" style="width:${pending ? 0 : (v / max * 100).toFixed(0)}%;"></div></div><span>${pending ? '&mdash;' : v.toFixed(1)}</span></div>`;
+
+async function runEngine(data) {
+  const { company, org, plan, ingestion, sre, days } = data;
+  document.getElementById('engine-empty').style.display = 'none';
+  document.getElementById('engine-content').style.display = 'block';
+  document.getElementById('enrich-body').innerHTML = 'Calling api.github.com&hellip;';
+  document.getElementById('deep-body').innerHTML = '';
+  document.getElementById('score-body').innerHTML = '';
+  document.getElementById('route-body').innerHTML = '';
+
+  let stars = 0, repoCount = 0, githubStatus = 'not found';
+  let recentlyActive = false, topLangs = [], vendorFound = null, vendorStatus = 'not checked';
+  const OBSERVABILITY_LANGS = ['Go', 'Rust', 'Python', 'TypeScript', 'Java'];
+  if (org) {
+    try {
+      let resp = await fetch(`https://api.github.com/orgs/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed`);
+      if (resp.status === 404) resp = await fetch(`https://api.github.com/users/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed`);
+      if (resp.status === 403) { githubStatus = 'rate-limited'; }
+      else if (resp.ok) {
+        const repos = await resp.json();
+        if (Array.isArray(repos)) {
+          repoCount = repos.length;
+          stars = repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0);
+          githubStatus = 'live';
+          const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+          recentlyActive = repos.some(r => r.pushed_at && new Date(r.pushed_at).getTime() > ninetyDaysAgo);
+          const langCounts = {};
+          repos.forEach(r => { if (r.language) langCounts[r.language] = (langCounts[r.language] || 0) + 1; });
+          topLangs = Object.keys(langCounts).sort((a, b) => langCounts[b] - langCounts[a]).slice(0, 3);
+          const topRepo = repos.slice().sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))[0];
+          if (topRepo) {
+            vendorStatus = 'checked';
+            const manifests = ['package.json', 'requirements.txt', 'go.mod'];
+            for (const file of manifests) {
+              try {
+                const mResp = await fetch(`https://raw.githubusercontent.com/${topRepo.full_name}/${topRepo.default_branch}/${file}`);
+                if (mResp.ok) {
+                  const text = (await mResp.text()).toLowerCase();
+                  if (text.includes('dd-trace') || text.includes('datadog')) { vendorFound = 'Datadog'; break; }
+                  if (text.includes('newrelic')) { vendorFound = 'New Relic'; break; }
+                  if (text.includes('opentelemetry') || text.includes('otel')) { vendorFound = 'OpenTelemetry (already OTel-native)'; break; }
+                }
+              } catch (e) { /* manifest not present, try next */ }
+            }
+          }
+        }
+      }
+    } catch (err) { githubStatus = 'error'; }
+  } else {
+    githubStatus = 'no org supplied';
+  }
+
+  const backendLangs = topLangs.filter(l => OBSERVABILITY_LANGS.includes(l));
+
+  const githubLine = githubStatus === 'live'
+    ? `<b>${stars}&#9733;</b> across <b>${repoCount}</b> public repos <span class="tag live">LIVE</span>`
+    : githubStatus === 'rate-limited' ? `rate-limited right now <span style="color:var(--muted);">(try again shortly)</span>`
+    : githubStatus === 'no org supplied' ? `no GitHub identity captured <span style="color:var(--muted);">(fill the GitHub field for the live fetch)</span>`
+    : `no public org found <span style="color:var(--muted);">(scored on other inputs only)</span>`;
+
+  const activityLine = githubStatus === 'live'
+    ? (recentlyActive ? `<b>active</b> in the last 90 days <span class="tag live">LIVE</span>` : `<span style="color:var(--muted);">no pushes in 90 days</span> <span class="tag live">LIVE</span>`)
+    : `<span class="tag sim">n/a</span>`;
+  const langLine = githubStatus === 'live'
+    ? (topLangs.length ? `${topLangs.join(', ')} ${backendLangs.length ? '<span class="tag live">backend-scale stack</span>' : '<span class="tag live">LIVE</span>'}` : `<span style="color:var(--muted);">none detected</span>`)
+    : `<span class="tag sim">n/a</span>`;
+  const vendorLine = vendorStatus !== 'checked'
+    ? `<span class="tag sim">n/a</span>`
+    : vendorFound
+      ? (vendorFound.startsWith('OpenTelemetry')
+          ? `<b style="color:var(--success);">${vendorFound}</b> <span class="tag live">near-zero switch friction</span>`
+          : `<b style="color:var(--hot);">running ${vendorFound}</b> <span class="tag live">displacement target</span>`)
+      : `<span style="color:var(--muted);">no vendor signature in top repo manifest</span> <span class="tag live">LIVE</span>`;
+
+  document.getElementById('enrich-body').innerHTML = `
+    <div class="kv">
+      <div style="margin-bottom:6px;color:var(--muted);font-size:11px;font-family:'Inter',sans-serif;">LIVE FROM GITHUB API &mdash; available the instant they sign up, no dependency on product usage</div>
+      <div><span class="k">Repo footprint:</span> ${githubLine}</div>
+      <div><span class="k">Recent activity:</span> ${activityLine}</div>
+      <div><span class="k">Primary languages:</span> ${langLine}</div>
+      <div><span class="k">Observability vendor:</span> ${vendorLine}</div>
+      <div style="margin:10px 0 4px;color:var(--muted);font-size:11px;font-family:'Inter',sans-serif;">ALSO KNOWN AT SIGNUP</div>
+      <div><span class="k">Plan type:</span> ${plan}</div>
+    </div>`;
+
+  const activityBonus = recentlyActive ? 5 : 0;
+  const langBonus = backendLangs.length ? 5 : 0;
+  let vendorBonus = 0;
+  if (vendorFound && !vendorFound.startsWith('OpenTelemetry')) vendorBonus = 10;
+  else if (vendorFound && vendorFound.startsWith('OpenTelemetry')) vendorBonus = 8;
+
+  const githubComponent = Math.min(Math.min(stars, 2000) / 2000 * 20 + activityBonus + langBonus + vendorBonus, 40);
+  const planComponent = plan === 'Cloud trial' ? 10 : 6;
+  const partialScore = Math.round(githubComponent + planComponent);
+  const ghDetail = githubStatus === 'live' ? ` <span style="color:var(--muted);font-size:11px;">(stars + activity${activityBonus?' +5':''} + langs${langBonus?' +5':''}${vendorBonus?' + vendor +'+vendorBonus:''})</span>` : '';
+
+  document.getElementById('score-body').innerHTML = `
+    <div class="score-row"><span>GitHub fit, live, basic (0 to 40 pts)${ghDetail}</span>${bar(githubComponent, 40)}</div>
+    <div class="score-row"><span>Plan type, basic (0 to 10 pts)</span>${bar(planComponent, 10)}</div>
+    <div class="score-row"><span>Ingestion % of limit, deep (0 to 30 pts)</span>${bar(0, 30, true)}</div>
+    <div class="score-row"><span>SRE/DevOps postings, deep (0 to 20 pts)</span>${bar(0, 20, true)}</div>
+    <div class="score-row" style="border-bottom:none;margin-top:6px;font-size:15px;"><span><b>Partial total</b></span><span><b>${partialScore}</b> / 50 so far</span></div>
+    <div style="margin-top:12px;color:var(--muted);font-size:12.5px;">Final tier can't be set yet &mdash; ingestion and hiring data aren't knowable at signup. Trigger deep enrichment below to complete the score.</div>
+  `;
+
+  document.getElementById('deep-body').innerHTML = `
+    <div class="trigger-box">
+      <div class="tb-copy">In production, this doesn't fire on a click &mdash; it fires when real usage data crosses a threshold, or the SRE-hiring lookup completes for a lead that already cleared the basic-fit floor. For the demo, trigger it manually to see the re-score.</div>
+      <div class="trigger-conditions">
+        <span class="trigger-chip">trigger: ingestion &ge; 80% of trial cap</span>
+        <span class="trigger-chip">trigger: day 20 of 30 in trial</span>
+        <span class="trigger-chip">trigger: SRE lookup completes</span>
+      </div>
+      <button class="ghost" id="deep-trigger-btn" type="button">Simulate deep enrichment now &rarr;</button>
+    </div>`;
+
+  document.getElementById('route-body').innerHTML = `<div class="kv" style="color:var(--muted);">${actionList(null, true)}</div>`;
+
+  document.getElementById('deep-trigger-btn').addEventListener('click', () => {
+    revealDeepEnrichment({ company, plan, ingestion, sre, days, githubComponent, planComponent, stars, repoCount, githubStatus });
+  }, { once: true });
+
+  signups.unshift({ company, signup_type: plan, github_stars: stars, ingestion_pct_of_limit: ingestion,
+    employees: '&mdash;', funding_stage: '&mdash;', sre_postings_90d: sre, days_since_signup: days,
+    score: partialScore, tier: 'nurture', live: true, pendingDeep: true });
+  renderAll();
+}
+
+function revealDeepEnrichment(ctx) {
+  const { company, plan, ingestion, sre, days, githubComponent, planComponent, stars, repoCount, githubStatus } = ctx;
+
+  document.getElementById('deep-body').innerHTML = `
+    <div class="kv">
+      <div style="margin-bottom:6px;color:var(--muted);font-size:11px;font-family:'Inter',sans-serif;">SIMULATED &mdash; would come from Mixpanel/product telemetry and a job-board lookup, arriving over the life of the trial</div>
+      <div><span class="k">Trial day reached:</span> ${days} of 30</div>
+      <div><span class="k">Ingestion, % of trial cap:</span> ${ingestion}% <span class="tag sim">simulated</span></div>
+      <div><span class="k">SRE/DevOps postings (90d):</span> ${sre} <span class="tag sim">simulated, gated lookup</span></div>
+    </div>`;
+
+  const ingestionComponent = (ingestion / 100) * 30;
+  const sreComponent = Math.min(sre, 10) / 10 * 20;
+  const score = Math.round(githubComponent + planComponent + ingestionComponent + sreComponent);
+  let tier = score >= 70 ? 'sales-assist-now' : score >= 40 ? 'nurture' : 'self-serve';
+  const meta = tierMeta[tier];
+  const ghDetail = githubStatus === 'live' ? '' : '';
+
+  document.getElementById('score-body').innerHTML = `
+    <div class="score-row"><span>GitHub fit, live, basic (0 to 40 pts)</span>${bar(githubComponent, 40)}</div>
+    <div class="score-row"><span>Plan type, basic (0 to 10 pts)</span>${bar(planComponent, 10)}</div>
+    <div class="score-row"><span>Ingestion % of limit, deep (0 to 30 pts)</span>${bar(ingestionComponent, 30)}</div>
+    <div class="score-row"><span>SRE/DevOps postings, deep (0 to 20 pts)</span>${bar(sreComponent, 20)}</div>
+    <div class="score-row" style="border-bottom:none;margin-top:6px;font-size:15px;"><span><b>Total</b></span><span><b>${score}</b></span></div>
+    <div style="margin-top:12px;">Threshold: &ge;70 sales-assist-now &bull; 40 to 69 nurture &bull; &lt;40 self-serve &rarr; <span class="badge ${meta.cls}">${meta.label}</span></div>
+  `;
+
+  const components = { github: githubComponent, plan: planComponent, ingestion: ingestionComponent, sre: sreComponent };
+  const dominant = dominantKey(components);
+  const tp = talkingPoint(dominant);
+  let routeHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="color:var(--muted);font-size:11px;margin-bottom:8px;">CRM RECORD</div>
+        <div class="crm-card kv">
+          <div><span class="k">Company:</span> ${company}</div>
+          <div><span class="k">Lifecycle stage:</span> ${meta.label}</div>
+          <div><span class="k">Score:</span> ${score}</div>
+          <div><span class="k">Plan:</span> ${plan}</div>
+        </div>
+        <div style="margin-top:14px;">${actionList(tier, false)}</div>
+      </div>
+      <div>`;
+
+  if (tier === 'sales-assist-now') {
+    routeHTML += `
+        <div style="color:var(--muted);font-size:11px;margin-bottom:8px;">SLACK &bull; #sales-signals</div>
+        <div class="slack-msg">
+          &#128308; <b>Hot account: ${company}</b> &bull; score ${score}/100<br>
+          <b>Why now:</b> ${tp.why}
+          <div class="opener">Suggested opener: &ldquo;${tp.opener}&rdquo;</div>
+          &rarr; Recommended: AE reach out within 24h
+        </div>`;
+  } else if (tier === 'nurture') {
+    routeHTML += `
+        <div style="color:var(--muted);font-size:11px;margin-bottom:8px;">SLACK &bull; #sales-signals</div>
+        <div class="slack-msg nurture-msg">
+          &#128993; <b>Building account: ${company}</b> &bull; score ${score}/100<br>
+          <b>Why:</b> Signals are trending up but not yet urgent.<br>
+          &rarr; Added to nurture sequence, revisit in 30 days
+        </div>`;
+  } else {
+    routeHTML += `<div class="kv" style="color:var(--muted);">No Slack alert. Routed to self-serve onboarding emails instead.</div>`;
+  }
+  routeHTML += `</div></div>`;
+  document.getElementById('route-body').innerHTML = routeHTML;
+
+  const idx = signups.findIndex(s => s.company === company && s.pendingDeep);
+  if (idx !== -1) {
+    signups[idx].score = score;
+    signups[idx].tier = tier;
+    delete signups[idx].pendingDeep;
+  }
+  renderAll();
+}
+
+document.getElementById('live-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const company = document.getElementById('f-company').value.trim();
+  const org = document.getElementById('f-github').value.trim();
+  const plan = document.getElementById('f-plan').value;
+  const ingestion = Number(document.getElementById('f-ingestion').value);
+  const sre = Number(document.getElementById('f-sre').value);
+  const days = Number(document.getElementById('f-days').value);
+
+  document.getElementById('signup-form-wrap').style.display = 'none';
+  document.getElementById('signup-success-wrap').style.display = 'block';
+  document.getElementById('success-msg').innerHTML = `We are spinning up the SigNoz workspace for <b>${company}</b>. Check your email to verify, and you will be sending your first traces in minutes.`;
+
+  runEngine({ company, org, plan, ingestion, sre, days });
+});
+
+// Fill simulated defaults deterministically from the company name when the user
+// leaves them blank, so the same company always demos identically.
+document.getElementById('f-company').addEventListener('blur', () => {
+  const company = document.getElementById('f-company').value.trim();
+  if (company) applyDefaults(company);
+});
+
+document.getElementById('oauth-google').addEventListener('click', () => document.getElementById('live-form').requestSubmit());
+document.getElementById('oauth-github').addEventListener('click', () => {
+  document.getElementById('demo-details').open = true;
+  document.getElementById('f-github').focus();
+});
+document.getElementById('continue-btn').addEventListener('click', () => switchTab('engine'));
+document.getElementById('another-btn').addEventListener('click', () => {
+  document.getElementById('signup-success-wrap').style.display = 'none';
+  document.getElementById('signup-form-wrap').style.display = 'block';
+  document.getElementById('live-form').reset();
+  applyDefaults('');
+});
+</script>
+</body>
+</html>
